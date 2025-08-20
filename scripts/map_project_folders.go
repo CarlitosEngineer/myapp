@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	// "io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -23,33 +23,39 @@ func generateFolderStructure(dirPath, prefix string) (string, error) {
 		return "", fmt.Errorf("error leyendo directorio: %w", err)
 	}
 
-	for i, entry := range entries {
-		name := entry.Name()
-		if ignoredDirs[name] {
-			continue
+	// Filtrar SOLO directorios y omitir los ignorados
+	dirs := make([]os.DirEntry, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() && !ignoredDirs[e.Name()] {
+			dirs = append(dirs, e)
 		}
+	}
 
-		isLast := i == len(entries)-1
+	// Orden estable por nombre (opcional pero recomendado)
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name() < dirs[j].Name() })
+
+	for i, entry := range dirs {
+		name := entry.Name()
+		isLast := i == len(dirs)-1
+
 		connector := "├── "
 		if isLast {
 			connector = "└── "
 		}
-
 		result.WriteString(fmt.Sprintf("%s%s%s\n", prefix, connector, name))
 
-		if entry.IsDir() {
-			subPrefix := prefix
-			if isLast {
-				subPrefix += "    "
-			} else {
-				subPrefix += "│   "
-			}
-			subStructure, err := generateFolderStructure(filepath.Join(dirPath, name), subPrefix)
-			if err != nil {
-				return "", err
-			}
-			result.WriteString(subStructure)
+		// Recursión solo en carpetas
+		subPrefix := prefix
+		if isLast {
+			subPrefix += "    "
+		} else {
+			subPrefix += "│   "
 		}
+		subStructure, err := generateFolderStructure(filepath.Join(dirPath, name), subPrefix)
+		if err != nil {
+			return "", err
+		}
+		result.WriteString(subStructure)
 	}
 
 	return result.String(), nil
@@ -61,8 +67,7 @@ func writeStructureToFile(dirPath, outputFile string) error {
 		return fmt.Errorf("error generando estructura: %w", err)
 	}
 
-	err = os.MkdirAll(filepath.Dir(outputFile), os.ModePerm)
-	if err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputFile), os.ModePerm); err != nil {
 		return fmt.Errorf("error creando carpeta de salida: %w", err)
 	}
 
@@ -74,9 +79,8 @@ func main() {
 	var inputPath string
 	fmt.Scanln(&inputPath)
 
-	outputPath := filepath.Join("temp", "map_project_files.txt")
-	err := writeStructureToFile(inputPath, outputPath)
-	if err != nil {
+	outputPath := filepath.Join("temp", "map_project_folders.txt")
+	if err := writeStructureToFile(inputPath, outputPath); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return
 	}
@@ -84,5 +88,6 @@ func main() {
 	fmt.Printf("Estructura de carpetas guardada en: %s\n", outputPath)
 }
 
-// go run scripts/map_project_files.go
+// Ejemplo:
+// go run scripts/map_project_folders.go
 // /home/user_carlos01/documents/myapp
